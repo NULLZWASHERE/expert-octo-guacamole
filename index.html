@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Roblox Toolkit - Combo + User ID Gen</title>
+    <style>
+        body { font-family: system-ui, sans-serif; background: #0a0a0a; color: #00ff00; margin: 0; padding: 20px; }
+        .container { max-width: 1100px; margin: auto; }
+        h1 { text-align: center; color: #00ff88; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab { padding: 12px 24px; background: #1a1a1a; border: 1px solid #00ff44; cursor: pointer; border-radius: 8px 8px 0 0; }
+        .tab.active { background: #00ff44; color: black; font-weight: bold; }
+        .card { background: #1a1a1a; padding: 20px; border-radius: 12px; border: 1px solid #00ff44; }
+        input, select, textarea, button {
+            padding: 12px; margin: 6px 4px; border-radius: 8px; background: #222; color: #0f0; border: 1px solid #00ff44;
+        }
+        button { background: #00ff44; color: black; font-weight: bold; cursor: pointer; }
+        button:hover { background: #00cc33; }
+        pre { background: #111; padding: 15px; border-radius: 8px; max-height: 65vh; overflow: auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { padding: 8px; border: 1px solid #00ff44; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Roblox Toolkit</h1>
+        <p style="text-align:center;">Combo Generator + User ID Generator (No Limits)</p>
+
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab(0)">Combo Generator</div>
+            <div class="tab" onclick="switchTab(1)">User ID Generator</div>
+        </div>
+
+        <!-- Combo Generator -->
+        <div id="tab0">
+            <div class="card">
+                <textarea id="usernames" rows="12" placeholder="Enter usernames (one per line)"></textarea><br>
+                <button onclick="generateCombos()">Generate Combos</button>
+                <button onclick="copyOutput()">Copy JSON</button>
+            </div>
+        </div>
+
+        <!-- User ID Generator -->
+        <div id="tab1" style="display:none;">
+            <div class="card">
+                <select id="mode">
+                    <option value="year">By Year</option>
+                    <option value="custom">Custom ID Range</option>
+                </select>
+
+                <div id="yearPanel">
+                    <select id="year"></select>
+                    <input type="number" id="count" value="300" placeholder="Count">
+                </div>
+
+                <div id="customPanel" style="display:none;">
+                    <input type="number" id="startId" value="10000000" placeholder="Start ID">
+                    <input type="number" id="customCount" value="300" placeholder="Count">
+                </div>
+
+                <label><input type="checkbox" id="check" checked> Resolve Usernames</label><br><br>
+                <button onclick="generateUsers()">Generate User IDs</button>
+                <button onclick="copyOutput()">Copy JSON</button>
+                <button onclick="exportCSV()">Export CSV</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Output</h2>
+            <pre id="output">Select a tool and run it...</pre>
+        </div>
+    </div>
+
+    <script>
+        // Populate years
+        const yearSelect = document.getElementById('year');
+        for (let y = 2006; y <= 2026; y++) {
+            const opt = document.createElement('option');
+            opt.value = y; opt.textContent = y;
+            yearSelect.appendChild(opt);
+        }
+
+        function switchTab(n) {
+            document.getElementById('tab0').style.display = n === 0 ? 'block' : 'none';
+            document.getElementById('tab1').style.display = n === 1 ? 'block' : 'none';
+            document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', i===n));
+        }
+
+        // Combo Generator
+        async function generateCombos() {
+            const usernames = document.getElementById('usernames').value.trim().split('\n').map(u => u.trim()).filter(Boolean);
+            const res = await fetch('/api/combos', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ usernames })
+            });
+            const data = await res.json();
+            document.getElementById('output').textContent = JSON.stringify(data, null, 2);
+        }
+
+        // User ID Generator
+        async function generateUsers() {
+            const mode = document.getElementById('mode').value;
+            const check = document.getElementById('check').checked;
+            let payload = { check };
+
+            if (mode === 'year') {
+                payload.year = parseInt(document.getElementById('year').value);
+                payload.count = parseInt(document.getElementById('count').value) || 300;
+            } else {
+                payload.start_id = parseInt(document.getElementById('startId').value);
+                payload.count = parseInt(document.getElementById('customCount').value) || 300;
+            }
+
+            const res = await fetch('/api/users', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            document.getElementById('output').textContent = JSON.stringify(data, null, 2);
+        }
+
+        function copyOutput() {
+            navigator.clipboard.writeText(document.getElementById('output').textContent);
+        }
+
+        function exportCSV() {
+            const text = document.getElementById('output').textContent;
+            try {
+                const data = JSON.parse(text);
+                if (data.users) {
+                    let csv = "ID,Username,DisplayName,Created,Banned\n";
+                    data.users.forEach(u => {
+                        csv += `"${u.id || ''}","${u.username || ''}","${u.displayName || ''}","${u.created || ''}","${u.isBanned || ''}"\n`;
+                    });
+                    downloadFile(csv, 'roblox_users.csv', 'text/csv');
+                }
+            } catch(e) {}
+        }
+
+        function downloadFile(content, filename, type) {
+            const blob = new Blob([content], { type });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = filename; a.click();
+        }
+
+        // Toggle panels
+        document.getElementById('mode').addEventListener('change', function() {
+            const showYear = this.value === 'year';
+            document.getElementById('yearPanel').style.display = showYear ? 'block' : 'none';
+            document.getElementById('customPanel').style.display = showYear ? 'none' : 'block';
+        });
+    </script>
+</body>
+</html>
